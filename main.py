@@ -21,8 +21,8 @@ class IndexHandler(tornado.web.RequestHandler):
 class WebSocketImgHandler(tornado.websocket.WebSocketHandler):
     def __init__(self, *args, **kwargs):
         super(WebSocketImgHandler, self).__init__(*args, **kwargs)
-        self.img = cv2.imread("w.jpg")
-
+        # self.img = cv2.imread("w.jpg")
+        self.cap = cv2.VideoCapture(-1)
     def open(self, *args):
         print("open", "WebSocketChatHandler")
         clients.append(self)
@@ -31,18 +31,24 @@ class WebSocketImgHandler(tornado.websocket.WebSocketHandler):
 
         """ handle message from websocket"""
         print message
-        img = copy.copy(self.img);
+        # img = copy.copy(self.img);
+        ret, img = self.cap.read()
+        if img is None:
+            return
         cv2.putText(img, '6', (100, 100), cv2.FONT_HERSHEY_COMPLEX, 4, (255, 255, 0), 2)
         ret, img = cv2.imencode(".jpg", img)
         img = base64.b64encode(img)
         self.write_message(img)
 
 
-def on_close(self):
-    clients.remove(self)
+    def on_close(self):
+        clients.remove(self)
+
+    def __delete__(self, instance):
+        self.cap.release()
 
 
 if __name__ == "__main__":
     app = tornado.web.Application([(r'/ws', WebSocketImgHandler), (r'/', IndexHandler)])
-    app.listen(80)
+    app.listen(8080)
     tornado.ioloop.IOLoop.instance().start()
