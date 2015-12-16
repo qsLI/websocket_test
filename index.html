@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Hello World</title>
+    <script src="http://code.jquery.com/jquery-1.10.1.min.js"></script>
+</head>
+<body>
+<Canvas id="canvas"/>
+</body>
+<script type="text/javascript">
+   $(function () {
+       if("WebSocket" in window) {
+           //init canvas
+           var canvas = document.getElementById('canvas');
+           canvas.width = 800;
+           canvas.height = 600;
+           var ctx = canvas.getContext("2d");
+
+           var img = new Image();
+
+           img.onload = function () {
+               ctx.drawImage(img, 0, 0);
+           }
+
+
+           var ws_path = "ws://" + window.location.host + window.location.pathname + 'ws';
+           var ws = new WebSocket(ws_path);
+           ws.onopen = function() {
+               ws.send(6);
+           };
+
+           //call back
+           ws.onmessage = function (msg) {
+                img.src="data:image/jpg;base64," + msg.data;
+                ws.send(6);
+           }
+
+           ws.onerror = function (e) {
+               console.log(e);
+               ws.send(1);
+           }
+       }  else {
+           alert("Your browser doesn't support websocket!");
+       }
+   });
+</script>
+</html>
