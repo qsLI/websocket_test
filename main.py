@@ -11,9 +11,10 @@ from rediss_queue import RedisQueue
 
 
 class CaptureThread(threading.Thread):
-    def __init__(self, q):
+    def __init__(self,  q, interval=0):
         threading.Thread.__init__(self)
         self.cap = cv2.VideoCapture(-1)
+        self.interval = interval
         self.q = q
 
     def run(self):
@@ -22,13 +23,29 @@ class CaptureThread(threading.Thread):
             if img is None:
                 time.sleep(1)
                 continue
-            ret, img = cv2.imencode(".jpg", img)
-            sio = StringIO()
-            np.save(sio, img)
-            self.q.put(sio.getvalue())
+            self.q.encode_one_frame(img)
+            time.sleep(self.interval)
 
     def __del__(self):
         self.cap.release()
+
+
+class PushThread(threading.Thread):
+    def __init__(self, q, interval=0):
+        threading.Thread.__init__(self)
+        self.q = q
+        self.interval = interval
+
+    def run(self):
+        while True:
+            if not clients:
+                continue
+            img = self.q.decode_one_frame()
+            ret, img = cv2.imencode(".jpg", img)
+            img = base64.b64encode(img)
+            for client in clients:
+                client.write_message(img)
+            time.sleep(self.interval)
 
 
 class IndexHandler(tornado.web.RequestHandler):
@@ -36,11 +53,6 @@ class IndexHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def get(request):
         request.render("index.html")
-
-# capture thread
-Q = RedisQueue("video")
-cap_thread = CaptureThread(Q)
-cap_thread.setDaemon(True)
 
 
 class WebSocketImgHandler(tornado.websocket.WebSocketHandler):
@@ -52,6 +64,7 @@ class WebSocketImgHandler(tornado.websocket.WebSocketHandler):
 
     def open(self, *args):
         print("open", "WebSocketChatHandler")
+        clients.append(self)
         if cap_thread.ident:
             pass
         else:
@@ -59,25 +72,27 @@ class WebSocketImgHandler(tornado.websocket.WebSocketHandler):
 
     def on_message(self, message):
         """ handle message from websocket"""
-        # print message
+        print message
         # img = copy.copy(self.img);
-        img = self.decode_one_frame()
-        ret, img = cv2.imencode(".jpg", img)
-        img = base64.b64encode(img)
-        self.write_message(img)
-
-    @staticmethod
-    def decode_one_frame():
-        """ decode a frame from message queue """
-        img = Q.get()
-        sio = StringIO(img)
-        img = np.load(sio)
-        img = cv2.imdecode(img, cv2.CV_LOAD_IMAGE_COLOR)
-        return img
+        # img = Q.decode_one_frame()
+        # ret, img = cv2.imencode(".jpg", img)
+        # img = base64.b64encode(img)
+        # self.write_message(img)
 
     def on_close(self):
-        pass
+        clients.remove(self)
 
+
+# capture thread
+Q = RedisQueue("video")
+clients = []
+# thread to capture frame from camera
+cap_thread = CaptureThread(Q)
+cap_thread.setDaemon(True)
+# thread to push to every client
+push_thread = PushThread(Q)
+push_thread.setDaemon(True)
+push_thread.start()
 
 if __name__ == "__main__":
     app = tornado.web.Application([(r'/ws', WebSocketImgHandler), (r'/', IndexHandler)])
