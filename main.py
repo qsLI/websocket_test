@@ -1,3 +1,4 @@
+import os
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
@@ -5,6 +6,7 @@ import cv2
 import base64,time
 import copy
 import threading
+import gzip
 import numpy as np
 from StringIO import StringIO
 from rediss_queue import RedisQueue
@@ -14,7 +16,7 @@ from detect_opencv import detect
 class CaptureThread(threading.Thread):
     def __init__(self,  q, interval=0):
         threading.Thread.__init__(self)
-        self.cap = cv2.VideoCapture(-1)
+        self.cap = cv2.VideoCapture(0)
         self.interval = interval
         self.q = q
 
@@ -23,6 +25,7 @@ class CaptureThread(threading.Thread):
             ret, img = self.cap.read()
             if img is None:
                 time.sleep(1)
+                print "error"
                 continue
             faces = detect(img)
             for (x, y, w, h) in faces:
@@ -47,8 +50,12 @@ class PushThread(threading.Thread):
                 continue
             ret, img = cv2.imencode(".jpg", img)
             img = base64.b64encode(img)
+            print img
+            sio = StringIO()
+            g = gzip.GzipFile(fileobj=sio, mode='wb')
+            g.write(img)
             for client in clients:
-                client.write_message(img)
+                client.write_message(sio.getvalue(),True)
             time.sleep(self.interval)
 
 
@@ -100,7 +107,9 @@ push_thread.setDaemon(True)
 push_thread.start()
 
 if __name__ == "__main__":
-    app = tornado.web.Application([(r'/ws', WebSocketImgHandler), (r'/', IndexHandler)])
-    print app.settings
+    settings = {
+    "static_path": os.path.join(os.path.dirname(__file__),"static"),
+    }
+    app = tornado.web.Application([(r'/ws', WebSocketImgHandler), (r'/', IndexHandler)], **settings)
     app.listen(8080)
     tornado.ioloop.IOLoop.instance().start()

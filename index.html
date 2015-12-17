@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <title>Hello World</title>
     <script src="http://code.jquery.com/jquery-1.10.1.min.js"></script>
+    <script src="static/gzip.min.js"></script>
+    <script src="static/gunzip.min.js"></script>
 </head>
 <body>
 <Canvas id="canvas"/>
@@ -32,7 +34,10 @@
 
            //call back
            ws.onmessage = function (msg) {
-                img.src="data:image/jpg;base64," + msg.data;
+               var gzip = new Zlib.Gunzip(msg.data);
+               var data =  gzip.decompress();
+               console.log(data);
+                img.src="data:image/jpg;base64," + data;
                 ws.send(6);
            }
 
