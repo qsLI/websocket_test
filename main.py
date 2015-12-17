@@ -8,6 +8,7 @@ import threading
 import numpy as np
 from StringIO import StringIO
 from rediss_queue import RedisQueue
+from detect_opencv import detect
 
 
 class CaptureThread(threading.Thread):
@@ -23,6 +24,9 @@ class CaptureThread(threading.Thread):
             if img is None:
                 time.sleep(1)
                 continue
+            faces = detect(img)
+            for (x, y, w, h) in faces:
+                cv2.rectangle(img, (x, y), (x + w, y + h), (255, 255, 0), 3)
             self.q.encode_one_frame(img)
             time.sleep(self.interval)
 
@@ -38,9 +42,9 @@ class PushThread(threading.Thread):
 
     def run(self):
         while True:
+            img = self.q.decode_one_frame()
             if not clients:
                 continue
-            img = self.q.decode_one_frame()
             ret, img = cv2.imencode(".jpg", img)
             img = base64.b64encode(img)
             for client in clients:
@@ -59,6 +63,7 @@ class WebSocketImgHandler(tornado.websocket.WebSocketHandler):
     """ websocket """
     def __init__(self, *args, **kwargs):
         super(WebSocketImgHandler, self).__init__(*args, **kwargs)
+
         # self.img = cv2.imread("w.jpg")
         print "init"
 
@@ -96,5 +101,6 @@ push_thread.start()
 
 if __name__ == "__main__":
     app = tornado.web.Application([(r'/ws', WebSocketImgHandler), (r'/', IndexHandler)])
+    print app.settings
     app.listen(8080)
     tornado.ioloop.IOLoop.instance().start()
